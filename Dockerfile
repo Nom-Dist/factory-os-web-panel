@@ -13,6 +13,7 @@ COPY --from=build --chown=node:node /app/node_modules ./node_modules
 COPY --from=build --chown=node:node /app/.next ./.next
 COPY --from=build --chown=node:node /app/package.json /app/package-lock.json /app/next.config.mjs /app/server.mjs ./
 COPY --from=build --chown=node:node /app/bridge ./bridge
+COPY --from=build --chown=node:node /app/scripts ./scripts
 USER node
 EXPOSE 3000
 CMD ["node", "server.mjs"]

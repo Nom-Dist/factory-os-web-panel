@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual, createHmac } from "node:crypto";
 import { WebSocketServer, WebSocket } from "ws";
 import { array, decode, encode } from "./codec.mjs";
+import { validPasswordHash, verifyPassword } from "./password.mjs";
 
 const READS = new Set(["GET_AE2_STOCKS", "GET_CRAFTING_JOBS", "GET_STOCK_RULES", "GET_CRAFT_OPTIONS"]);
 const WRITES = new Set(["START_CRAFT", "CANCEL_CRAFT", "ARCHIVE_CRAFT", "SET_STOCK_RULE"]);
@@ -11,18 +12,23 @@ async function body(req, limit = 65536) {
   for await (const chunk of req) { size += chunk.length; if (size > limit) throw new Error("payload_limit"); chunks.push(chunk); }
   return Buffer.concat(chunks);
 }
-export function createHub({ bridgeToken = "", panelToken = "", origin = "", now = Date.now, staleMs = 20000, commandMs = 20000 } = {}) {
-  const clients = new Set(), pending = new Map(), attempts = new Map();
+export function createHub({ bridgeToken = "", panelToken = "", passwordHash = "", origin = "", now = Date.now, staleMs = 20000, commandMs = 20000 } = {}) {
+  const clients = new Set(), pending = new Map(), attempts = new Map(), sessions = new Map();
+  let verifying = 0;
   const wss = new WebSocketServer({ noServer: true, maxPayload: 65536, perMessageDeflate: false });
   let device = null, telemetry = null, lastSeen = 0, lastBroadcastOnline = false, closed = false;
-  const configured = bridgeToken.length >= 32 && panelToken.length >= 32 && bridgeToken !== panelToken;
-  const sign = (v) => createHmac("sha256", panelToken).update(v).digest("base64url");
+  const configured = bridgeToken.length >= 32 && panelToken.length >= 32 && bridgeToken !== panelToken && validPasswordHash(passwordHash);
+  const sign = (v) => createHmac("sha256", panelToken).update(passwordHash).update(v).digest("base64url");
+  const cookie = value => `factoryos_session=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${value ? 28800 : 0}${origin.startsWith("https:") ? "; Secure" : ""}`;
+  // Remove the old path-scoped cookie so it cannot shadow the new root session.
+  const cookies = value => [cookie(value), "factoryos_session=; HttpOnly; SameSite=Strict; Path=/bridge; Max-Age=0" + (origin.startsWith("https:") ? "; Secure" : "")];
+  const nonceFrom = req => /(?:^|;\s*)factoryos_session=([^;]+)/.exec(req.headers.cookie || "")?.[1]?.split(".")[1];
   function authorized(req) {
     if (!configured) return false;
     const raw = /(?:^|;\s*)factoryos_session=([^;]+)/.exec(req.headers.cookie || "")?.[1];
     if (!raw) return false;
     const [expires, nonce, mac] = raw.split(".");
-    return /^\d+$/.test(expires || "") && Number(expires) > now() && Number(expires) <= now() + 8 * 3600000 && equal(sign(`${expires}.${nonce}`), mac);
+    return /^\d+$/.test(expires || "") && sessions.get(nonce) === Number(expires) && Number(expires) > now() && Number(expires) <= now() + 8 * 3600000 && equal(sign(`${expires}.${nonce}`), mac);
   }
   function sameOrigin(req) {
     try { return new URL(req.headers.origin).origin === (origin || `http://${req.headers.host}`); } catch { return false; }
@@ -85,21 +91,31 @@ export function createHub({ bridgeToken = "", panelToken = "", origin = "", now 
     if (!path.startsWith("/bridge/")) return false;
     try {
       if (path === "/bridge/health") { json(res, 200, { configured, deviceOnline: snapshot().online, version: 1 }); return true; }
+      if (path === "/bridge/session" && req.method === "GET") { json(res, 200, { authenticated: authorized(req), configured }); return true; }
       if (path === "/bridge/session" && req.method === "POST") {
         if (!sameOrigin(req)) { json(res, 403, { error: "ORIGIN_DENIED" }); return true; }
+        if (!configured) { json(res, 503, { error: "PASSWORD_NOT_CONFIGURED" }); return true; }
         const ip = req.socket.remoteAddress || "unknown"; const previous = attempts.get(ip);
         const a = previous && now() - previous.at < 60000 ? previous : { at: now(), count: 0 };
         if (attempts.size >= 256) attempts.delete(attempts.keys().next().value);
         attempts.set(ip, a); a.count++;
         if (a.count > 8) { json(res, 429, { error: "RATE_LIMIT" }); return true; }
         const input = JSON.parse((await body(req, 1024)).toString());
-        if (!configured || !equal(input.token, panelToken)) { json(res, 401, { error: "INVALID_ACCESS_KEY" }); return true; }
-        const value = `${now() + 8 * 3600000}.${randomBytes(16).toString("hex")}`;
-        json(res, 200, { ok: true }, { "Set-Cookie": `factoryos_session=${value}.${sign(value)}; HttpOnly; SameSite=Strict; Path=/bridge; Max-Age=28800${origin.startsWith("https:") ? "; Secure" : ""}` }); return true;
+        if (verifying >= 2) { json(res, 429, { error: "RATE_LIMIT" }); return true; }
+        verifying++; let verified;
+        try { verified = await verifyPassword(input.password, passwordHash); } finally { verifying--; }
+        if (!verified) { json(res, 401, { error: "INVALID_PASSWORD" }); return true; }
+        for (const [id, expiry] of sessions) if (expiry <= now()) sessions.delete(id);
+        if (sessions.size >= 64) sessions.delete(sessions.keys().next().value);
+        const expires = now() + 8 * 3600000, nonce = randomBytes(16).toString("hex");
+        sessions.set(nonce, expires); const value = `${expires}.${nonce}`;
+        json(res, 200, { ok: true }, { "Set-Cookie": cookies(`${value}.${sign(value)}`) }); return true;
       }
       if (path === "/bridge/logout" && req.method === "POST") {
         if (!sameOrigin(req)) { json(res, 403, { error: "ORIGIN_DENIED" }); return true; }
-        json(res, 200, { ok: true }, { "Set-Cookie": "factoryos_session=; HttpOnly; SameSite=Strict; Path=/bridge; Max-Age=0" }); return true;
+        if (authorized(req)) sessions.delete(nonceFrom(req));
+        for (const ws of clients) if (!authorized({ headers: { cookie: ws.sessionCookie } })) ws.close(1008, "session ended");
+        json(res, 200, { ok: true }, { "Set-Cookie": cookies("") }); return true;
       }
       if (path === "/bridge/ingest" && req.method === "POST") {
         if (!configured || !equal(req.headers.authorization, `Bearer ${bridgeToken}`)) { json(res, 401, { error: "UNAUTHORIZED_DEVICE" }); return true; }
@@ -149,7 +165,7 @@ export function createHub({ bridgeToken = "", panelToken = "", origin = "", now 
   function close() {
     if (closed) return; closed = true; clearInterval(timer);
     for (const [, p] of pending) { clearTimeout(p.timer); p.resolve({ ok: false, error: p.sent ? "UNCERTAIN" : "RELAY_STOPPED" }); }
-    pending.clear(); for (const ws of clients) ws.terminate(); device?.terminate(); wss.close(); telemetry = null;
+    pending.clear(); sessions.clear(); for (const ws of clients) ws.terminate(); device?.terminate(); wss.close(); telemetry = null;
   }
-  return { handle, upgrade, close, snapshot };
+  return { handle, upgrade, close, snapshot, authenticated: authorized };
 }

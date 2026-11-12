@@ -12,19 +12,33 @@ Node.js 22+ (geliştirmede 24) gerekir. Bu klasörde:
 
 ```powershell
 npm ci
+npm run password:hash
+```
+
+`.env.example` dosyasını `.env.local` olarak kopyalayın. `BRIDGE_TOKEN` ve `PANEL_TOKEN` alanlarına **birbirinden farklı, rastgele ve en az 32 karakterli** değerler yazın. `password:hash` komutu terminalde gizli olarak en az 12 karakterli panel şifresini iki kez ister. Çıktıdaki `PANEL_PASSWORD_HASH='scrypt:...'` satırını `.env.local` dosyasına ekleyin; **tek tırnakları koruyun**. Şifrenin kendisi dosyaya yazılmaz. Bu dosya Git tarafından yok sayılır. Değerleri `NEXT_PUBLIC_` değişkenlerine koymayın. `PUBLIC_ORIGIN` tarayıcıda açtığınız tam origin ile eşleşmelidir; örneğin `http://localhost:3000`.
+
+```powershell
 npm run dev
 ```
 
-`http://localhost:3000` adresini açın. Anahtarlar yokken canlı bağlantı ve üretim kapalıdır; tasarımı **Demoyu aç** ile inceleyebilirsiniz.
-
-Canlı deneme için `.env.example` dosyasını `.env.local` olarak kopyalayın. `BRIDGE_TOKEN` ve `PANEL_TOKEN` alanlarına **birbirinden farklı, rastgele ve en az 32 karakterli** değerler yazın. Bu dosya Git tarafından yok sayılır. Anahtarları `NEXT_PUBLIC_` değişkenlerine koymayın. `PUBLIC_ORIGIN` tarayıcıda açtığınız tam origin ile eşleşmelidir; örneğin `http://localhost:3000`. Sunucuyu yeniden başlatın.
+`http://localhost:3000` adresini açıp panel şifresiyle giriş yapın. Panelin tamamı, demo görünümü dahil, şifre ister. Yapılandırma eksikse giriş kapalıdır. Şifre/token değişince sunucuyu yeniden başlatın.
 
 - `BRIDGE_TOKEN`: yalnızca OpenComputers sunucusunun gönderim/relay bağlantısı.
-- `PANEL_TOKEN`: panel oturumunu açma. HttpOnly / SameSite=Strict cookie kullanılır, token tarayıcı deposuna yazılmaz. Oturum 8 saattir; HTTPS origin'de cookie Secure olur. Bütün canlı veriler ve komutlar oturum gerektirir.
+- `PANEL_TOKEN`: yalnızca oturum imzalama anahtarıdır; giriş ekranına yazılmaz.
+- `PANEL_PASSWORD_HASH`: panel şifresinin rastgele salt ile scrypt özeti. Giriş HttpOnly / SameSite=Strict cookie kullanır, şifre tarayıcı deposuna yazılmaz. Oturum 8 saattir; HTTPS origin'de cookie Secure olur. Çıkış, sunucunun yeniden başlaması veya şifre değişimi eski oturumu geçersiz kılar. Giriş denemeleri hız sınırına tabidir.
 
 ## Oyun sunucusunu bağlama
 
-FactoryOS **v0.6.0** kurulmuş server bilgisayarında Internet Card gerekir. Ana ekran/yan ekran için internet gerekmez. Paneli yayımladıktan sonra HTTPS uplink önerilir:
+FactoryOS **v0.6.1** kurulmuş server bilgisayarında Internet Card gerekir. Ana ekran/yan ekran için internet gerekmez. Çalışan Factory Server ekranında **F4** tuşuna veya **WEB PANELI / BAGLANTI** düğmesine basın:
+
+1. Panel adresini girin: `https://PANEL_ADRESINIZ`. Menü `/bridge/ingest` yolunu ekler.
+2. Web sunucusundaki `BRIDGE_TOKEN` değerini token alanına yapıştırın. Giriş maskelenir; alanı boş bırakmak kayıtlı tokeni korur.
+3. Üretim/kural yönetimi için **UZAKTAN KONTROL: ACIK** seçin; yalnız izleme için kapalı bırakın.
+4. **KAYDET / BAGLAN** seçin. Disk kaydı başarılı olunca bağlantı, FactoryOS yeniden başlatılmadan uygulanır. Güncelleme sürerken bağlantı ayarı değiştirilmez.
+
+Fiziksel klavye, pano ve dokunmatik klavye desteklenir. Tab alan değiştirir, Enter kaydeder, Esc menüyü kapatır. **BAGLANTIYI KES** yalnızca web erişimini kapatır; mevcut AE2 işleri devam eder.
+
+Komut satırı alternatifi:
 
 ```sh
 factoryos stop
@@ -38,7 +52,7 @@ factoryos config webControl true
 factoryos start --foreground
 ```
 
-Panelde **Bağlantı kur** ile **PANEL_TOKEN** girin. Oyun sunucusunun varsayılan 5 saniyelik gönderiminden sonra veriler görünür. Eski OpenComputers HTTPS erişimi Java sertifika deposuna ve mod ağ izinlerine bağlıdır; gerçek oyun kabulü bekleniyor.
+Tarayıcıda panel şifresiyle giriş yapın. Oyun sunucusunun varsayılan 5 saniyelik gönderiminden sonra veriler görünür. Eski OpenComputers HTTPS erişimi Java sertifika deposuna ve mod ağ izinlerine bağlıdır; gerçek oyun kabulü bekleniyor.
 
 Güvenilen ağdaki doğrudan WebSocket seçeneği:
 
@@ -76,7 +90,7 @@ npm run test:flow
 npm run build
 ```
 
-`test:flow` ayrı FactoryOS v0.6.0 kaynak checkout'u, o checkout'un `.tools` klasöründe Lupa ve Python gerektirir. Kaynak checkout otomatik bulunamazsa `FACTORYOS_ROOT=/tam/yol/factory-os npm run test:flow` kullanın. `npm test` tek başına bu web deposunda çalışır. Gerçek Lua 5.2/5.3 bridge'i gerçek localhost TCP/RFC6455 bağlantısıyla Node relay'e bağlar; oturum → stok → quote → aynı START'ın iki kez iletilmesi → tek native çağrı ve önceden journal yazımı doğrulanır. AE2/component/disk mock'tur. Gerçek Minecraft veya HTTPS sertifika kabulü değildir.
+`test:flow` ayrı FactoryOS v0.6.1 kaynak checkout'u, o checkout'un `.tools` klasöründe Lupa ve Python gerektirir. Kaynak checkout otomatik bulunamazsa `FACTORYOS_ROOT=/tam/yol/factory-os npm run test:flow` kullanın. `npm test` tek başına bu web deposunda çalışır. Gerçek Lua 5.2/5.3 bridge'i gerçek localhost TCP/RFC6455 bağlantısıyla Node relay'e bağlar; oturum → stok → quote → aynı START'ın iki kez iletilmesi → tek native çağrı ve önceden journal yazımı doğrulanır. AE2/component/disk mock'tur. Gerçek Minecraft veya HTTPS sertifika kabulü değildir.
 
 ## Yayıma hazırlık
 
@@ -91,13 +105,12 @@ Container build:
 
 ```sh
 docker build -t factoryos-panel .
-docker run --env-file .env.local -e HOST=0.0.0.0 -e PORT=3000 -p 127.0.0.1:3000:3000 factoryos-panel
 ```
 
-Docker komutundaki HOST/PORT, yerel `.env.local` değerlerini container içinde geçersiz kılar. Böylece uygulama container'ın ağ arayüzünü dinler; host'ta port yalnızca reverse proxy'nin erişeceği loopback adresine açılır.
+Çalıştırma için [Compose rehberini](docs/vps.md) kullanın. Compose tek tırnaklı şifre hash'ini doğru okur ve paneli yalnızca Caddy'nin eriştiği iç ağa açar. `.env.local` dosyası doğrudan `docker run --env-file` ile aynı biçimde yorumlanmaz.
 
 Reverse proxy HTTPS/WSS sonlandırmalı, WebSocket upgrade başlıklarını geçirmeli, `PUBLIC_ORIGIN` gerçek `https://...` adresine ayarlanmalıdır. Container imajına `.env.local` alınmaz. Docker imajı bu oturumda çalıştırılmadı; üretim Node build'i doğrulandı.
 
 Vercel güncel olarak WebSocket destekler; fakat bu özel custom-server relay standart `next build` dağıtımıyla otomatik çalışmaz. Vercel hedefi seçilirse upgrade route'ları platformun WebSocket API'sine taşınmalı ve instance'lar arası koordinasyon harici bir depoyla yapılmalıdır. Bu sürüm için Docker/tek süreç Node yolu hazırdır. Hosting yayını henüz yapılmadı. Bağımsız kaynak deposu: https://github.com/Nom-Dist/factory-os-web-panel.
 
-[Desktop önizleme](docs/previews/web-panel-desktop.png) · [Mobil önizleme](docs/previews/web-panel-mobile.png). Görseller **örnek veri** içerir.
+[Şifreli giriş](docs/previews/web-panel-login.png) · [Desktop önizleme](docs/previews/web-panel-desktop.png) · [Mobil önizleme](docs/previews/web-panel-mobile.png). Dashboard görselleri **örnek veri** içerir.

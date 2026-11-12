@@ -7,6 +7,7 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 import { createHub } from "../bridge/hub.mjs";
+import { hashPassword } from "../bridge/password.mjs";
 
 const panelRoot = fileURLToPath(new URL("../", import.meta.url));
 const candidates = process.env.FACTORYOS_ROOT ? [resolve(process.env.FACTORYOS_ROOT)] : [dirname(panelRoot), resolve(panelRoot, "../factory-os")];
@@ -22,7 +23,8 @@ for (const architecture of ["52", "53"]) {
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   const port = server.address().port, base = `http://127.0.0.1:${port}`;
   const bridgeToken = randomBytes(32).toString("hex"), panelToken = randomBytes(32).toString("hex");
-  hub = createHub({ bridgeToken, panelToken, origin: base, commandMs: 5000 });
+  const password = randomBytes(24).toString("hex");
+  hub = createHub({ bridgeToken, panelToken, passwordHash: await hashPassword(password), origin: base, commandMs: 5000 });
   try {
     child = spawn("python", [resolve(factoryRoot, "tests/web_interop.py")], { env: { ...process.env, TEST_LUA: architecture, TEST_PORT: String(port), TEST_BRIDGE_TOKEN: bridgeToken }, stdio: ["ignore", "pipe", "pipe"] });
     let output = "", stderr = ""; child.stdout.on("data", x => output += x.toString()); child.stderr.on("data", x => stderr += x.toString());
@@ -30,7 +32,7 @@ for (const architecture of ["52", "53"]) {
     const deadline = Date.now() + 8000;
     while (!hub.snapshot().online && Date.now() < deadline && child.exitCode === null) await new Promise(r => setTimeout(r, 20));
     assert.equal(hub.snapshot().online, true, stderr || "Lua device did not connect");
-    const login = await fetch(base + "/bridge/session", { method: "POST", headers: { Origin: base }, body: JSON.stringify({ token: panelToken }) });
+    const login = await fetch(base + "/bridge/session", { method: "POST", headers: { Origin: base }, body: JSON.stringify({ password }) });
     assert.equal(login.status, 200); const cookie = login.headers.get("set-cookie").split(";")[0];
     async function rpc(command, args) {
       const res = await fetch(base + "/bridge/command", { method: "POST", headers: { Origin: base, Cookie: cookie, "Content-Type": "application/json" }, body: JSON.stringify({ command, args }) });

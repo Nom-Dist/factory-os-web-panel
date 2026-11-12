@@ -3,9 +3,15 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { once } from "node:events";
 import { randomBytes } from "node:crypto";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { mkdtemp, writeFile, unlink, rmdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { WebSocket } from "ws";
 import { decode, encode } from "../bridge/codec.mjs";
 import { createHub } from "../bridge/hub.mjs";
+import { hashPassword, verifyPassword } from "../bridge/password.mjs";
 
 function fixtureTelemetry(boot = "test-device-boot") {
   return { kind: "telemetry", boot, controlEnabled: true, status: { version: "0.6.0", ae2: { online: true, itemTypes: 1 },
@@ -16,11 +22,19 @@ async function fixture(options = {}) {
   server.on("upgrade", (req, socket, head) => hub.upgrade(req, socket, head));
   server.listen(0, "127.0.0.1"); await once(server, "listening");
   const base = `http://127.0.0.1:${server.address().port}`, bridgeToken = randomBytes(32).toString("hex"), panelToken = randomBytes(32).toString("hex");
-  hub = createHub({ bridgeToken, panelToken, origin: base, commandMs: 500, ...options });
+  const password = "test-only panel password "+randomBytes(8).toString("hex");
+  const passwordHash = await hashPassword(password);
+  hub = createHub({ bridgeToken, panelToken, passwordHash, origin: base, commandMs: 500, ...options });
   const post = (path, value, cookie = "", origin = base) => fetch(base + path, { method: "POST", headers: { "Content-Type": "application/json", Origin: origin, Cookie: cookie }, body: JSON.stringify(value) });
-  async function login() { const res = await post("/bridge/session", { token: panelToken }); assert.equal(res.status, 200); return res.headers.get("set-cookie").split(";")[0]; }
+  async function login() {
+    const res = await post("/bridge/session", { password }); assert.equal(res.status, 200);
+    const cookies = res.headers.getSetCookie();
+    assert.match(cookies[0], /HttpOnly; SameSite=Strict; Path=\/; Max-Age=28800/);
+    assert.match(cookies[1], /Path=\/bridge; Max-Age=0/);
+    return cookies[0].split(";")[0];
+  }
   const ingest = (message) => fetch(base + "/bridge/ingest", { method: "POST", headers: { Authorization: `Bearer ${bridgeToken}` }, body: encode(message) });
-  return { hub, base, bridgeToken, post, login, ingest, close: async () => { hub.close(); server.closeAllConnections(); await new Promise(r => server.close(r)); } };
+  return { hub, base, bridgeToken, post, login, ingest, panelToken, password, close: async () => { hub.close(); server.closeAllConnections(); await new Promise(r => server.close(r)); } };
 }
 function messages(ws) {
   const queued = [], waiting = [];
@@ -42,7 +56,8 @@ test("sessions protect reads, reject cross-origin writes, and never expose keys"
   const f = await fixture();
   try {
     assert.equal((await fetch(f.base + "/bridge/state")).status, 401);
-    assert.equal((await f.post("/bridge/session", { token: "wrong" })).status, 401);
+    assert.equal((await f.post("/bridge/session", { password: "wrong" })).status, 401);
+    assert.equal((await f.post("/bridge/session", { token: f.panelToken })).status, 401);
     const cookie = await f.login();
     const state = await (await fetch(f.base + "/bridge/state", { headers: { Cookie: cookie } })).json();
     assert.equal(state.online, false); assert.equal(state.controlAllowed, false); assert.equal(JSON.stringify(state).includes(f.bridgeToken), false);
@@ -95,4 +110,37 @@ test("stale device data is hidden, reboot clears pending requests, sessions expi
     await f.ingest(fixtureTelemetry("new-boot")); assert.equal(f.hub.snapshot().online, true);
     time += 8 * 3600000 + 1; assert.equal((await fetch(f.base + "/bridge/state", { headers: { Cookie: cookie } })).status, 401);
   } finally { await f.close(); }
+});
+
+test("password hashing uses a fresh salt, rejects wrong passwords and malformed hashes", async () => {
+  const a = await hashPassword("a strong test password"), b = await hashPassword("a strong test password");
+  assert.notEqual(a, b); assert.equal(await verifyPassword("a strong test password", a), true);
+  assert.equal(await verifyPassword("wrong", a), false); assert.equal(await verifyPassword("test", "broken"), false);
+  await assert.rejects(hashPassword("short"));
+});
+test("generated password hashes survive Next.js env file loading", async () => {
+  const hash = await hashPassword("test-only env password"), dir = await mkdtemp(join(tmpdir(), "factoryos-password-env-"));
+  const file = join(dir, ".env.local");
+  try {
+    await writeFile(file, `FACTORYOS_ENV_HASH='${hash}'\n`);
+    const {stdout} = await promisify(execFile)(process.execPath, ["-e", "require('@next/env').loadEnvConfig(process.argv[1]); process.stdout.write(process.env.FACTORYOS_ENV_HASH)", dir]);
+    assert.equal(stdout, hash);
+    assert.equal(await verifyPassword("test-only env password", stdout), true);
+  } finally { await unlink(file); await rmdir(dir); }
+});
+test("logout revokes the cookie and all viewer connections for that session", async () => {
+  const f = await fixture();
+  try {
+    const cookie = await f.login();
+    const status = await (await fetch(f.base + "/bridge/session", {headers:{Cookie:cookie}})).json(); assert.equal(status.authenticated,true);
+    const viewer = new WebSocket(f.base.replace("http:","ws:")+"/bridge/view",{headers:{Cookie:cookie,Origin:f.base}});
+    await once(viewer,"open"); const closed = once(viewer,"close");
+    assert.equal((await f.post("/bridge/logout",{},cookie)).status,200); await closed;
+    assert.equal((await fetch(f.base+"/bridge/state",{headers:{Cookie:cookie}})).status,401);
+  } finally { await f.close(); }
+});
+test("missing password configuration cannot fall back to the old access key", async () => {
+  const f = await fixture({passwordHash:""});
+  try { assert.equal((await f.post("/bridge/session",{token:f.panelToken,password:f.password})).status,503); }
+  finally { await f.close(); }
 });
