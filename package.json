@@ -1,0 +1,29 @@
+{
+  "name": "factoryos-web-panel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "packageManager": "npm@11.16.0",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env.local server.mjs --dev",
+    "build": "next build",
+    "start": "node --env-file-if-exists=.env.local server.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test tests/*.test.mjs",
+    "test:flow": "node scripts/check-flow.mjs"
+  },
+  "dependencies": {
+    "next": "16.4.6",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "lucide-react": "^0.468.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.0"
+  }
+}

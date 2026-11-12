@@ -1,0 +1,29 @@
+services:
+  panel:
+    build: .
+    restart: unless-stopped
+    env_file: .env.local
+    environment:
+      HOST: 0.0.0.0
+      PORT: "3000"
+      PUBLIC_ORIGIN: https://${PANEL_DOMAIN:?Set PANEL_DOMAIN in .env.local}
+    expose:
+      - "3000"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - panel
+    environment:
+      PANEL_DOMAIN: ${PANEL_DOMAIN:?Set PANEL_DOMAIN in .env.local}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+volumes:
+  caddy_data:
+  caddy_config:
