@@ -60,7 +60,7 @@ Oturum 8 saat sürer. Çıkış ve relay'in yeniden başlaması oturumları ipta
 
 ## 5. OpenComputers'ı eşleştir
 
-Oyun içindeki Factory Server'da **FactoryOS v0.6.1** ve Internet Card bulunmalıdır. Oyun kaynakları ayrı `factory-os` deposundadır; yayımlanmamış bir sürüm F5/F6 ile indirilemez.
+Oyun içindeki Factory Server'da **FactoryOS v0.6.2** ve Internet Card bulunmalıdır. Oyun kaynakları ayrı `factory-os` deposundadır; yayımlanmamış bir sürüm F5/F6 ile indirilemez.
 
 FactoryOS çalışırken server ekranında **F4** tuşuna veya **WEB PANELI / BAGLANTI** düğmesine bas:
 

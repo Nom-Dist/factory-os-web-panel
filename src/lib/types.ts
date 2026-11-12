@@ -1,6 +1,6 @@
 export type Item = { name: string; label: string; damage: number; size: number; hasTag: boolean; tag: string; identityComplete: boolean; isCraftable: boolean };
 export type Cpu = { name: string; busy: boolean; selectable?: boolean; storage: number };
-export type Job = { id: string; owner: string; automatic?: boolean; label: string; amount: number; cpu: string; state: string; error: string };
+export type Job = { id: string; owner: string; automatic?: boolean; label: string; amount: number; cpu: string; state: string; error: string; errorCode?: string; errorMessage?: string };
 export type Rule = { id: number; item?: Item; label: string; minimum: number; target: number; enabled: boolean; stock?: number; inFlight: number; state: string; error: string; retryIn: number };
 export type Rules = { rules: Rule[]; page: number; pages: number; total: number; revision: number; paused: boolean; error: string };
 export type Stocks = { items: Item[]; page: number; pages: number; total: number; allTotal: number; revision: number; truncated: boolean; query?: string };

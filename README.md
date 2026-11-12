@@ -29,7 +29,7 @@ npm run dev
 
 ## Oyun sunucusunu bağlama
 
-FactoryOS **v0.6.1** kurulmuş server bilgisayarında Internet Card gerekir. Ana ekran/yan ekran için internet gerekmez. Çalışan Factory Server ekranında **F4** tuşuna veya **WEB PANELI / BAGLANTI** düğmesine basın:
+FactoryOS **v0.6.2** kurulmuş server bilgisayarında Internet Card gerekir. Ana ekran/yan ekran için internet gerekmez. Çalışan Factory Server ekranında **F4** tuşuna veya **WEB PANELI / BAGLANTI** düğmesine basın:
 
 1. Panel adresini girin: `https://PANEL_ADRESINIZ`. Menü `/bridge/ingest` yolunu ekler.
 2. Web sunucusundaki `BRIDGE_TOKEN` değerini token alanına yapıştırın. Giriş maskelenir; alanı boş bırakmak kayıtlı tokeni korur.
@@ -83,6 +83,8 @@ Stok sorguları 24 satırlık mevcut AE2 sayfalamasını kullanır. Tüm envante
 
 ## Kontroller
 
+v0.2.2 üretim penceresi planlama sonucunu bekler: **Kontrol et ve üret → kaynak/plan denetimi → başladı veya hata**. Hata açıklaması pencerede ve üretim geçmişinde görünür, ham sürücü yanıtı **AE2 hata ayrıntısı** altında açılır. Açıklama alanları için oyun sunucusunu v0.6.2'ye güncelleyin. OC ayrı bir eksik malzeme listesi sağlamadığı için kesin malzeme/miktar uydurulmaz; [sınırlar](https://github.com/Nom-Dist/factory-os/blob/main/docs/crafting.md) açıklanır. [Denetim](docs/previews/web-panel-craft-checking.png) ve [hata](docs/previews/web-panel-craft-failed.png) ekranları yerel gerçek Lua/relay bağlantısında, **mock AE2** ile tarayıcıda doğrulandı. Dolu CPU reddi ve CPU boşalınca başarılı başlangıç da sınandı; gerçek Minecraft hata kabulü bekleniyor.
+
 ```powershell
 npm run typecheck
 npm test
@@ -90,7 +92,7 @@ npm run test:flow
 npm run build
 ```
 
-`test:flow` ayrı FactoryOS v0.6.1 kaynak checkout'u, o checkout'un `.tools` klasöründe Lupa ve Python gerektirir. Kaynak checkout otomatik bulunamazsa `FACTORYOS_ROOT=/tam/yol/factory-os npm run test:flow` kullanın. `npm test` tek başına bu web deposunda çalışır. Gerçek Lua 5.2/5.3 bridge'i gerçek localhost TCP/RFC6455 bağlantısıyla Node relay'e bağlar; oturum → stok → quote → aynı START'ın iki kez iletilmesi → tek native çağrı ve önceden journal yazımı doğrulanır. AE2/component/disk mock'tur. Gerçek Minecraft veya HTTPS sertifika kabulü değildir.
+`test:flow` ayrı FactoryOS v0.6.2 kaynak checkout'u, o checkout'un `.tools` klasöründe Lupa ve Python gerektirir. Kaynak checkout otomatik bulunamazsa `FACTORYOS_ROOT=/tam/yol/factory-os npm run test:flow` kullanın. `npm test` tek başına bu web deposunda çalışır. Gerçek Lua 5.2/5.3 bridge'i gerçek localhost TCP/RFC6455 bağlantısıyla Node relay'e bağlar; oturum → stok → quote → aynı START'ın iki kez iletilmesi → tek native çağrı ve önceden journal yazımı doğrulanır. AE2/component/disk mock'tur. Gerçek Minecraft veya HTTPS sertifika kabulü değildir.
 
 ## Yayıma hazırlık
 
