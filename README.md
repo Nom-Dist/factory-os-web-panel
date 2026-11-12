@@ -77,7 +77,7 @@ OpenComputers Factory Server
 
 Relay yalnızca bilinen stok/üretim komutlarını iletir. Sunucu `webControl=false` iken bütün yazma işlemlerini tekrar reddeder. İşler `@factoryos-web` kayıt sahibine aittir; mevcut 16 sahip limitinde bir yer kullanır. Aynı `START_CRAFT` numarası journal tarafından engellenir. Yazılmış bir komut relay veya socket kopmasında tekrar oynatılmaz. Yanıtsız iş **belirsiz** kabul edilip işler ekranından kontrol edilir. Geçmişten kaybolmuş sıra numaraları da tekrar çalışmaz. Güncelleme sırasında normal üretim kilitleri geçerlidir.
 
-Stok sorguları 24 satırlık mevcut AE2 sayfalamasını kullanır. Tüm envanterin ikinci bir kopyası Lua RAM'inde tutulmaz. Metadata varsayılan 5 saniyede bir (`webInterval`: 2..10), stok görünümü 15 saniyede bir/arama sonrası sorgulanır. HTTPS transport komutları sonraki cihaz gönderiminde alır; WS transport hemen iletir. Bir ağ adımında tek okuma/yazma yapılır; kısmi TCP yazmaları ve bağlantı timeout'ları yönetilir. Gönderim ana döngüde nonblocking ilerler.
+Stok sorguları 24 satırlık mevcut AE2 sayfalamasını kullanır. Tüm envanterin ikinci bir kopyası Lua RAM'inde tutulmaz. Metadata varsayılan 5 saniyede bir (`webInterval`: 2..10), stok görünümü 15 saniyede bir/arama sonrası sorgulanır. Aynı görünüm yenilenirken mevcut satırlar görünür kalır; aynı anda ikinci stok sorgusu gönderilmez. Arama/filtre/sıra/sayfa değişiminde, AE2 veya relay bağlantısı kaybında, cihaz yeniden başladığında ve sorgu hatasında eski liste temizlenir. HTTPS transport komutları sonraki cihaz gönderiminde alır; WS transport hemen iletir. Bir ağ adımında tek okuma/yazma yapılır; kısmi TCP yazmaları ve bağlantı timeout'ları yönetilir. Gönderim ana döngüde nonblocking ilerler.
 
 20 saniye yeni metadata gelmezse panel canlı veriyi kaldırır. Relay belleği kalıcı değildir: yeniden başlayınca eski işleri/komutları restore edip tekrar göndermez, cihazdan yeni snapshot bekler. Asıl kalıcı iş/kural verisi oyun bilgisayarındadır. Aynı relay için tek Factory Server kullanın.
 
@@ -93,6 +93,10 @@ npm run build
 `test:flow` ayrı FactoryOS v0.6.1 kaynak checkout'u, o checkout'un `.tools` klasöründe Lupa ve Python gerektirir. Kaynak checkout otomatik bulunamazsa `FACTORYOS_ROOT=/tam/yol/factory-os npm run test:flow` kullanın. `npm test` tek başına bu web deposunda çalışır. Gerçek Lua 5.2/5.3 bridge'i gerçek localhost TCP/RFC6455 bağlantısıyla Node relay'e bağlar; oturum → stok → quote → aynı START'ın iki kez iletilmesi → tek native çağrı ve önceden journal yazımı doğrulanır. AE2/component/disk mock'tur. Gerçek Minecraft veya HTTPS sertifika kabulü değildir.
 
 ## Yayıma hazırlık
+
+Kullanıcı 12 Kasım 2026'da VPS kurulumu, Factory Server bağlantısı ve webden üretim emrinin çalıştığını bildirdi. Bu bildirim ayrıntılı iptal/reboot/eksik malzeme senaryolarının kabulü değildir.
+
+Depo yenileme düzeltmesi üretim Node sunucusunda, gerçek relay/WebSocket üzerinden beş saniye geciken **örnek cihaz yanıtlarıyla** tarayıcıda doğrulandı. Periyodik ve elle yenilemede satırlar görünür kaldı, miktarlar güncellendi; arama değişiminde ve AE2 bağlantısı kaybında eski sonuçlar temizlendi. [Yenileme sırasında görünür liste](docs/previews/web-panel-stock-refresh.png) gerçek Minecraft verisi içermez.
 
 Bu sürüm **tek Node süreci** olarak `server.mjs` üzerinden çalışır. `next start` relay'i başlatmaz. Docker destekleyen bir sunucu/platforma veya sürekli Node sürecine dağıtılabilir:
 
@@ -111,6 +115,6 @@ docker build -t factoryos-panel .
 
 Reverse proxy HTTPS/WSS sonlandırmalı, WebSocket upgrade başlıklarını geçirmeli, `PUBLIC_ORIGIN` gerçek `https://...` adresine ayarlanmalıdır. Container imajına `.env.local` alınmaz. Docker imajı bu oturumda çalıştırılmadı; üretim Node build'i doğrulandı.
 
-Vercel güncel olarak WebSocket destekler; fakat bu özel custom-server relay standart `next build` dağıtımıyla otomatik çalışmaz. Vercel hedefi seçilirse upgrade route'ları platformun WebSocket API'sine taşınmalı ve instance'lar arası koordinasyon harici bir depoyla yapılmalıdır. Bu sürüm için Docker/tek süreç Node yolu hazırdır. Hosting yayını henüz yapılmadı. Bağımsız kaynak deposu: https://github.com/Nom-Dist/factory-os-web-panel.
+Vercel güncel olarak WebSocket destekler; fakat bu özel custom-server relay standart `next build` dağıtımıyla otomatik çalışmaz. Vercel hedefi seçilirse upgrade route'ları platformun WebSocket API'sine taşınmalı ve instance'lar arası koordinasyon harici bir depoyla yapılmalıdır. Bu sürüm için Docker/tek süreç Node yolu hazırdır. Bağımsız kaynak deposu: https://github.com/Nom-Dist/factory-os-web-panel.
 
 [Şifreli giriş](docs/previews/web-panel-login.png) · [Desktop önizleme](docs/previews/web-panel-desktop.png) · [Mobil önizleme](docs/previews/web-panel-mobile.png). Dashboard görselleri **örnek veri** içerir.

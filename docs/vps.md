@@ -1,6 +1,6 @@
 # Ubuntu / Debian VPS kurulumu
 
-Panel Minecraft'ın içindeki bilgisayarda değil, VPS üzerinde bir Node uygulaması olarak çalışır. Aynı VPS Minecraft sunucusunu da barındırabilir. Bu rehber Docker Compose ve Caddy ile tek süreç relay'i yayımlar; henüz gerçek bir VPS'e uygulanmadı.
+Panel Minecraft'ın içindeki bilgisayarda değil, VPS üzerinde bir Node uygulaması olarak çalışır. Aynı VPS Minecraft sunucusunu da barındırabilir. Bu rehber Docker Compose ve Caddy ile tek süreç relay'i yayımlar. Kullanıcı VPS üzerinde bağlantı ve webden üretim emrinin çalıştığını doğruladı; kullandığı dağıtım yönteminin bu rehberle birebir aynı olduğu ayrıca doğrulanmadı.
 
 ## 1. Ön koşullar
 

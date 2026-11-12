@@ -51,7 +51,7 @@ export default function Dashboard() {
   const [stocks, setStocks] = useState<Stocks | null>(null), [query, setQuery] = useState(""), [filter, setFilter] = useState("all"), [sort, setSort] = useState("name"), [page, setPage] = useState(1), [loadingStocks, setLoadingStocks] = useState(false);
   const [energy, setEnergy] = useState<number[]>([]), [craft, setCraft] = useState<Craft | null>(null), [editor, setEditor] = useState<RuleEditor | null>(null);
   const [origin, setOrigin] = useState("https://panel-adresiniz");
-  const actionLock = useRef(false), stockRequest = useRef(0), wasBoot = useRef<string | null>(null), lastEnergyAt = useRef(0);
+  const actionLock = useRef(false), stockRequest = useRef(0), stockInFlight = useRef<number | null>(null), wasBoot = useRef<string | null>(null), lastEnergyAt = useRef(0);
   const actual = demo ? demoSnapshot : snapshot, data = actual.online ? actual.telemetry : null;
   const aeOnline = !!data?.status.ae2.online, canControl = !demo && actual.controlAllowed && aeOnline;
   const cpus = list(data?.jobs.cpus), jobs = list(data?.jobs.trackedJobs), rules = list(data?.rules), clients = list(data?.status.clients);
@@ -87,31 +87,38 @@ export default function Dashboard() {
           const result = JSON.parse(e.data) as Snapshot;
           if (result.type !== "snapshot") return;
           setSnapshot(result);
-          if (!result.online) { setStocks(null); stockRequest.current++; setEnergy([]); wasBoot.current = null; return; }
+          if (!result.online) { setStocks(null); stockRequest.current++; stockInFlight.current = null; setLoadingStocks(false); setEnergy([]); wasBoot.current = null; return; }
           const boot = result.telemetry?.boot;
-          if (boot && boot !== wasBoot.current) { setStocks(null); setEnergy([]); wasBoot.current = boot; }
+          if (boot && boot !== wasBoot.current) { setStocks(null); stockRequest.current++; stockInFlight.current = null; setLoadingStocks(false); setEnergy([]); wasBoot.current = boot; }
+          if (!result.telemetry?.status.ae2.online) { setStocks(null); stockRequest.current++; stockInFlight.current = null; setLoadingStocks(false); }
           const p = result.telemetry?.status.power.ae2;
           if (p?.supported && p.capacity > 0 && result.receivedAt !== lastEnergyAt.current) {
             lastEnergyAt.current = result.receivedAt || 0; setEnergy(v => [...v.slice(-29), p.stored / p.capacity * 100]);
           }
         } catch { setNotice("Relay yanıtı okunamadı."); }
       };
-      ws.onclose = () => { if (stopped) return; setSnapshot(empty); setStocks(null); setEnergy([]); setTransport("Oturum / bağlantı bekleniyor"); reconnect = setTimeout(connect, retry); retry = Math.min(15000, retry * 2); };
+      ws.onclose = () => { if (stopped) return; setSnapshot(empty); setStocks(null); stockRequest.current++; stockInFlight.current = null; setLoadingStocks(false); setEnergy([]); setTransport("Oturum / bağlantı bekleniyor"); reconnect = setTimeout(connect, retry); retry = Math.min(15000, retry * 2); };
       ws.onerror = () => { setTransport("Relay bağlantısı kurulamadı"); };
     }
     connect(); return () => { stopped = true; clearTimeout(reconnect); if (ws) { ws.onclose = null; ws.close(); } };
   }, [demo, connection]);
   const refreshStocks = useCallback(async () => {
-    if (demo || !snapshot.online || !snapshot.telemetry?.status.ae2.online) return;
-    const token = ++stockRequest.current; setLoadingStocks(true); setStocks(null);
+    if (demo || !snapshot.online || !snapshot.telemetry?.status.ae2.online || stockInFlight.current !== null) return;
+    // Keep the current page visible while its next snapshot is fetched.
+    const token = ++stockRequest.current; stockInFlight.current = token; setLoadingStocks(true);
     try { const result = await rpc<Stocks>("GET_AE2_STOCKS", { query, filter, sort, page }); if (token === stockRequest.current) setStocks({ ...result, items: list(result.items) }); }
-    catch (err) { if (token === stockRequest.current) setNotice((err as Error).message); }
-    finally { if (token === stockRequest.current) setLoadingStocks(false); }
-  }, [demo, snapshot.online, snapshot.telemetry?.status.ae2.online, rpc, query, filter, sort, page]);
+    catch (err) { if (token === stockRequest.current) { setStocks(null); setNotice((err as Error).message); } }
+    finally { if (token === stockRequest.current) setLoadingStocks(false); if (stockInFlight.current === token) stockInFlight.current = null; }
+  }, [demo, snapshot.online, snapshot.telemetry?.status.ae2.online, snapshot.telemetry?.boot, rpc, query, filter, sort, page]);
   useEffect(() => {
+    // A different query/device must never show the previous page's results.
+    setStocks(null);
+  }, [demo, snapshot.online, snapshot.telemetry?.status.ae2.online, snapshot.telemetry?.boot, query, filter, sort, page]);
+  useEffect(() => {
+    setLoadingStocks(false);
     if (view !== "stocks" && view !== "overview") return;
     const timer = setTimeout(refreshStocks, 350); const poll = setInterval(refreshStocks, 15000);
-    return () => { clearTimeout(timer); clearInterval(poll); stockRequest.current++; };
+    return () => { clearTimeout(timer); clearInterval(poll); stockRequest.current++; stockInFlight.current = null; };
   }, [refreshStocks, view]);
   const demoRows = demoItems.filter(i => (!query || `${i.label} ${i.name}`.toLowerCase().includes(query.toLowerCase())) && (filter !== "craftable" || i.isCraftable)).toSorted((a, b) => sort === "amount" ? b.size - a.size : a.label.localeCompare(b.label));
   const stockData = demo ? { ...demoStocks, items: demoRows, total: demoRows.length } : aeOnline ? stocks : null;
